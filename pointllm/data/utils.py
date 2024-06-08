@@ -5,6 +5,7 @@ from pointllm import conversation as conversation_lib
 from dataclasses import dataclass
 from typing import Optional, Dict, Sequence
 import torch
+from scipy.spatial import cKDTree
 
 import numpy as np
 import os
@@ -139,6 +140,8 @@ def preprocess_multimodal_point_cloud(
             replace_token = default_point_patch_token * point_token_len 
             if point_backbone_config['mm_use_point_start_end']:
                 replace_token = point_backbone_config['default_point_start_token']+ replace_token + point_backbone_config['default_point_end_token']
+            if type(sentence["value"]) == list:
+                sentence["value"] = sentence["value"][0]
             sentence["value"] = sentence["value"].replace(point_indicator, replace_token)
 
     return sources
@@ -158,6 +161,18 @@ def pc_norm(pc):
 
 def load_objaverse_point_cloud(data_path, object_id, pointnum=8192, use_color=False):
     filename = f"{object_id}_{pointnum}.npy"
+    point_cloud = np.load(os.path.join(data_path, filename))
+
+    # * normalize
+    point_cloud = pc_norm(point_cloud)
+
+    if not use_color:
+        point_cloud = point_cloud[:, :3]
+
+    return point_cloud
+
+def load_scene_point_cloud(data_path, object_id, use_color=False):
+    filename = f"{object_id}.npy"
     point_cloud = np.load(os.path.join(data_path, filename))
 
     # * normalize
@@ -208,6 +223,8 @@ def farthest_point_sample(point, npoint):
         centroids: sampled pointcloud index, [npoint, D]
     """
     N, D = point.shape
+    if N <= npoint:
+        return point
     xyz = point[:,:3]
     centroids = np.zeros((npoint,))
     distance = np.ones((N,)) * 1e10
@@ -221,6 +238,36 @@ def farthest_point_sample(point, npoint):
         farthest = np.argmax(distance, -1)
     point = point[centroids.astype(np.int32)]
     return point
+
+def downsample_point_cloud(point_cloud, radius=0.1):
+    """
+    Downsample a point cloud by selecting points with a minimum spacing defined by 'radius'.
+
+    Parameters:
+    - point_cloud (numpy.ndarray): The Nx3 array of points.
+    - radius (float): The radius of spacing between points.
+
+    Returns:
+    - numpy.ndarray: The downsampled Nx3 array of points.
+    """
+    tree = cKDTree(point_cloud[:, :3])
+    selected_points = []
+    indices = set()
+
+    # Randomly shuffle indices to ensure random sampling
+    all_indices = np.arange(point_cloud.shape[0])
+    np.random.shuffle(all_indices)
+
+    for index in all_indices:
+        if index not in indices:
+            # Query points within the radius
+            neighbors = tree.query_ball_point(point_cloud[index][:3], r=radius)
+            # Mark these points as visited
+            indices.update(neighbors)
+            # Add the current point to the selected list
+            selected_points.append(point_cloud[index])
+
+    return np.array(selected_points)
 
 def pc_normalize(pc):
     """
