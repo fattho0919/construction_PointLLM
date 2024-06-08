@@ -14,6 +14,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import torch
+import bitsandbytes as bnb
+from bitsandbytes.optim import GlobalOptimManager
+
 from dataclasses import dataclass, field
 import pathlib
 from typing import Optional, List
@@ -36,7 +40,6 @@ DEFAULT_EOS_TOKEN = "</s>"
 DEFAULT_BOS_TOKEN = "</s>"
 DEFAULT_UNK_TOKEN = "<unk>"
 
-
 @dataclass
 class ModelArguments:
     model_name_or_path: Optional[str] = field(default="")
@@ -48,7 +51,7 @@ class DataArguments:
     anno_path: str = field(default=None, metadata={"help": "Path to the utterance data. If None, will use referit3d by defautl."})
     use_color: bool = field(default=False, metadata={"help": "Whether to use color."})
     data_debug_num: int = field(default=0, metadata={"help": "Number of data to use in debug mode. If larger than 0, use debug mode, else use the whole data"})
-    split_train_val: bool = field(default=False, metadata={"help": "Whether to split train and val."})
+    split_train_val: bool = field(default=True, metadata={"help": "Whether to split train and val."})
     split_ratio: float = field(default=0.9, metadata={"help": "Ratio of train and val."})
     pointnum: int = field(default=8192, metadata={"help": "Number of points."})
     conversation_types: List[str] = field(default_factory=lambda: ["simple_description"], metadata={"help": "Conversation types to use."})
@@ -58,7 +61,7 @@ class DataArguments:
 class TrainingArguments(transformers.TrainingArguments):
     # * can refer to https://huggingface.co/docs/transformers/v4.28.1/en/main_classes/trainer#transformers.TrainingArgument
     cache_dir: Optional[str] = field(default=None)
-    optim: str = field(default="adamw_torch")
+    optim: str = field(default="adamw_bnb_8bit")
     model_max_length: int = field(
         default=2048,
         metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
@@ -112,6 +115,31 @@ def train():
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
         )
+        if training_args.bf16:
+            model = model.to(torch.bfloat16)
+            print("Model is converted to bfloat16")
+    
+    # First, collect all the embeddings that need to be replaced
+    embeddings_to_replace = []
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Embedding):
+            embeddings_to_replace.append((name, module))
+
+    # Now, replace the embeddings without modifying the dictionary during iteration
+    for name, module in embeddings_to_replace:
+        new_module = bnb.nn.StableEmbedding(module.num_embeddings, module.embedding_dim, padding_idx=module.padding_idx)
+        # Navigate to the right attribute and set the new module
+        parent_name, child_name = name.rsplit('.', 1)
+        parent_module = dict(model.named_modules())[parent_name]
+        setattr(parent_module, child_name, new_module)
+
+    # Register StableEmbedding layers to use 32-bit optimization
+    for module in model.modules():
+        if isinstance(module, bnb.nn.StableEmbedding):
+            GlobalOptimManager.get_instance().register_module_override(module, 'weight', {'optim_bits': 32})
+
+    # Initialize the optimizer
+    optimizer = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995), min_8bit_size=16384)
 
     model.config.use_cache = False
 
@@ -194,6 +222,7 @@ def train():
                 return wrap_func
 
             FSDP.__init__ = patch_FSDP_use_orig_params(FSDP.__init__)
+    
 
     data_module = make_object_point_data_module(tokenizer=tokenizer,
                                                     data_args=data_args)
@@ -201,6 +230,7 @@ def train():
     trainer = PointLLMTrainer(model=model,
                     tokenizer=tokenizer,
                     args=training_args,
+                    optimizers=(optimizer, None),
                     **data_module)
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):

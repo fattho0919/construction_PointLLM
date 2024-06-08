@@ -145,8 +145,8 @@ class PointTransformer(nn.Module):
         ckpt = torch.load(bert_ckpt_path, map_location='cpu')
         state_dict = OrderedDict()
         for k, v in ckpt['state_dict'].items():
-            if k.startswith('module.point_encoder.'):
-                state_dict[k.replace('module.point_encoder.', '')] = v
+            if k.startswith('point_encoder.'):
+                state_dict[k.replace('point_encoder.', '')] = v
 
         incompatible = self.load_state_dict(state_dict, strict=False)
 

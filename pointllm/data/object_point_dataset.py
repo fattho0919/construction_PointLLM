@@ -2,6 +2,7 @@ import os
 import json
 import torch
 import numpy as np
+import pickle
 
 import copy
 import transformers
@@ -65,7 +66,7 @@ class ObjectPointCloudDataset(Dataset):
                  data_path=None,
                  anno_path=None,
                  tokenizer=None,
-                 pointnum=8192,
+                 pointnum=1000000,
                  split='train',
                  conversation_types=None, # * default is simple_des, used for stage1 pre-train
                  use_color=True,
@@ -100,26 +101,27 @@ class ObjectPointCloudDataset(Dataset):
         # Load the data list from JSON
         print(f"Loading anno file from {anno_path}.")
         with open(anno_path, "r") as json_file:
-            self.list_data_dict = json.load(json_file)
+            self.list_data_dict = json.load(json_file)[:1000]
         
         # * print the conversations_type
         print(f"Using conversation_type: {self.conversation_types}") 
+        print(f"The dataset size is: {len(self.list_data_dict)}.")
         # * print before filtering
-        print(f"Before filtering, the dataset size is: {len(self.list_data_dict)}.")
+        # print(f"Before filtering, the dataset size is: {len(self.list_data_dict)}.")
 
         # * iterate the list and filter
         # * these two ids have corrupted colored point files, so filter them when use_color is True
-        filter_ids = ['6760e543e1d645d5aaacd3803bcae524', 'b91c0711149d460a8004f9c06d3b7f38'] if self.use_color else []
+        # filter_ids = ['6760e543e1d645d5aaacd3803bcae524', 'b91c0711149d460a8004f9c06d3b7f38'] if self.use_color else []
 
         # Iterate the list, filter those "conversation_type" not in self.conversation_types
-        self.list_data_dict = [
-            data for data in self.list_data_dict 
-            if data.get('conversation_type', 'simple_description') in self.conversation_types 
-            and data.get('object_id') not in filter_ids
-        ]
+        # self.list_data_dict = [
+        #     data for data in self.list_data_dict 
+        #     if data.get('conversation_type', 'simple_description') in self.conversation_types 
+        #     and data.get('scene_id') not in filter_ids
+        # ]
 
         # * print after filtering
-        print(f"After filtering, the dataset size is: {len(self.list_data_dict)}.")
+        # print(f"After filtering, the dataset size is: {len(self.list_data_dict)}.")
         # * print the size of different conversation_type
         for conversation_type in self.conversation_types:
             print(f"Number of {conversation_type}: {len([data for data in self.list_data_dict if data.get('conversation_type', 'simple_description') == conversation_type])}")
@@ -127,7 +129,7 @@ class ObjectPointCloudDataset(Dataset):
         if self.data_args is not None and self.data_args.data_debug_num > 0:
             self.list_data_dict = self.list_data_dict[:self.data_args.data_debug_num]
             # * print all the scan_id in debug mode, not using for loop
-            print('Debug mode, using: ' + ' '.join([data['object_id'] for data in self.list_data_dict]))
+            print('Debug mode, using: ' + ' '.join([data['scene_id'] for data in self.list_data_dict]))
         elif self.data_args is not None and self.data_args.split_train_val:
             # * split train and val with 9:1 ratios
             if self.split == 'train':
@@ -137,12 +139,11 @@ class ObjectPointCloudDataset(Dataset):
                 self.list_data_dict = self.list_data_dict[int(self.data_args.split_ratio * len(self.list_data_dict)):]
                 print(f"Val set size: {len(self.list_data_dict)}")
 
-    def _load_point_cloud(self, object_id, type='objaverse'):
-        if type == 'objaverse':
-            return self._load_objaverse_point_cloud(object_id) 
+    def _load_point_cloud(self, scene_id):
+        return self._load_objaverse_point_cloud(scene_id) 
 
-    def _load_objaverse_point_cloud(self, object_id):
-        filename = f"{object_id}_{self.pointnum}.npy"
+    def _load_objaverse_point_cloud(self, scene_id):
+        filename = f"{scene_id}.npy"
         point_cloud = np.load(os.path.join(self.data_path, filename))
 
         if not self.use_color:
@@ -164,23 +165,43 @@ class ObjectPointCloudDataset(Dataset):
         return pc
     
     def __getitem__(self, index):
+        i = 0
+        scene_id = self.list_data_dict[index]['scene_id']
+        point_cloud = self._load_point_cloud(scene_id) # * N, C
+        while len(point_cloud) == 0:
+            i += 1
+            index = index + i
+            scene_id = self.list_data_dict[index]['scene_id']
+            point_cloud = self._load_point_cloud(scene_id) 
         sources = self.list_data_dict[index]
         if isinstance(index, int):
             sources = [sources]
         assert len(sources) == 1, "sources should be a list"
         if self.point_indicator in sources[0]['conversations'][0]['value']:
-
-            object_id = self.list_data_dict[index]['object_id']
-
             # Point cloud representation
-            point_cloud = self._load_point_cloud(object_id) # * N, C
+            
+            # if self.list_data_dict[index]['type'] == 'view':
+            #     with open(f"data/s3dis/s3dis_view_vit-gpt2_matching_idx/{scene_id}.pickle", "rb") as f:
+            #         idx_file = pickle.load(f)
+            #     idx = idx_file[self.list_data_dict[index]['id']]
+            #     point_cloud = point_cloud[idx]
+            
+            # elif self.list_data_dict[index]['type'] == 'entity':
+            #     with open(f"data/s3dis/s3dis_entity_vit-gpt2_matching_idx/{scene_id}.pickle", "rb") as f:
+            #         idx_file = pickle.load(f)
+            #     idx = idx_file[self.list_data_dict[index]['id']]
+            #     point_cloud = point_cloud[idx]
+
+            if point_cloud.shape[0] > self.pointnum:
+                point_cloud = downsample_point_cloud(point_cloud)
+
             if self.normalize_pc:
                 point_cloud = self.pc_norm(point_cloud) # * need to norm since point encoder is norm
 
             if self.tokenizer is None:
                 data_dict = dict(
                     point_clouds=torch.from_numpy(point_cloud.astype(np.float32)),
-                    object_ids=object_id
+                    scene_id=scene_id
                 )
                 return data_dict
 

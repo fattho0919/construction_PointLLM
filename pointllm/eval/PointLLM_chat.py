@@ -7,16 +7,16 @@ from pointllm.utils import disable_torch_init
 from pointllm.model import *
 from pointllm.model.utils import KeywordsStoppingCriteria
 
-from pointllm.data import load_objaverse_point_cloud
+from pointllm.data import load_scene_point_cloud
 
 import os
 
 def load_point_cloud(args):
-    object_id = args.object_id
-    print(f"[INFO] Loading point clouds using object_id: {object_id}")
-    point_cloud = load_objaverse_point_cloud(args.data_path, object_id, pointnum=8192, use_color=True)
+    scene_id = args.scene_id
+    print(f"[INFO] Loading point clouds using scene_id: {scene_id}")
+    point_cloud = load_scene_point_cloud(args.data_path, scene_id, use_color=True)
     
-    return object_id, torch.from_numpy(point_cloud).unsqueeze_(0).to(torch.float32)
+    return scene_id, torch.from_numpy(point_cloud).unsqueeze_(0).to(torch.float32)
 
 def init_model(args):
     # Model
@@ -57,19 +57,19 @@ def start_conversation(args, model, tokenizer, point_backbone_config, keywords, 
     print("[INFO] Starting conversation... Enter 'q' to exit the program and enter 'exit' to exit the current conversation.")
     while True:
         print("-" * 80)
-        # Prompt for object_id
-        object_id = input("[INFO] Please enter the object_id or 'q' to quit: ")
+        # Prompt for scene_id
+        scene_id = input("[INFO] Please enter the scene_id or 'q' to quit: ")
         
         # Check if the user wants to quit
-        if object_id.lower() == 'q':
+        if scene_id.lower() == 'q':
             print("[INFO] Quitting...")
             break
         else:
             # print info
-            print(f"[INFO] Chatting with object_id: {object_id}.")
+            print(f"[INFO] Chatting with scene_id: {scene_id}.")
         
-        # Update args with new object_id
-        args.object_id = object_id.strip()
+        # Update args with new scene_id
+        args.scene_id = scene_id.strip()
         
         # Load the point cloud data
         try:

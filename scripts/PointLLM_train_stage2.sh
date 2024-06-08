@@ -2,17 +2,17 @@ master_port=$((RANDOM % (65535 - 49152 + 1) + 49152))
 # Get the filename without extension
 filename=$(basename "$0" | cut -f 1 -d '.')
 
-dir_path=PointLLM
+dir_path=/home/hongfa/construction_PointLLM
 
-model_name_or_path=outputs/PointLLM_train_stage1/PointLLM_train_stage1 # Path to the output dir of stage 1 training
-data_path=data/objaverse_data
-anno_path=data/anno_data/PointLLM_complex_instruction_70K.json
-output_dir=outputs/PointLLM_train_stage2/$filename
+model_name_or_path=checkpoints/PointLLM_7B_v1.2 # Path to the output dir of stage 1 training
+data_path=data/s3dis/pc
+anno_path=data/s3dis/s3dis_anno_list.json
+output_dir=outputs/construction_PointLLM_train_stage2/$filename
 
 cd $dir_path
 
 PYTHONPATH=$dir_path:$PYTHONPATH \
-torchrun --nnodes=1 --nproc_per_node=8 --master_port=$master_port pointllm/train/train_mem.py \
+torchrun --nnodes=1 --nproc_per_node=1 --master_port=$master_port pointllm/train/train_mem.py \
     --model_name_or_path $model_name_or_path \
     --data_path $data_path \
     --anno_path $anno_path \
@@ -20,7 +20,7 @@ torchrun --nnodes=1 --nproc_per_node=8 --master_port=$master_port pointllm/train
     --version v1 \
     --model_max_length 2048 \
     --num_train_epochs 3 \
-    --per_device_train_batch_size 4 \
+    --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 1 \
     --evaluation_strategy "no" \
@@ -34,7 +34,7 @@ torchrun --nnodes=1 --nproc_per_node=8 --master_port=$master_port pointllm/train
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --bf16 True \
-    --fix_llm False \
+    --fix_llm True \
     --fix_pointnet True \
     --report_to wandb \
     --run_name $filename \

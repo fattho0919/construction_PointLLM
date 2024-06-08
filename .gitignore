@@ -10,3 +10,6 @@ modelnet40_data
 *.zip
 *.ipynb
 serving_workdirs
+pc
+s3dis
+scannet
