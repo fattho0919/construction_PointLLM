@@ -8,7 +8,7 @@ data_path=data/pc
 anno_path=data/all_scene_anno_list.json
 output_dir=outputs/construction_PointLLM_train_stage1/$filename
 # point_backbone_ckpt=checkpoints/point_bert_v1.2.pt
-point_backbone_ckpt=/home/hongfa/scene_ULIP/outputs/reproduce_pointbert_1kpts/checkpoint_best.pt
+point_backbone_ckpt=/home/hongfa/scene_ULIP/outputs/reproduce_pointbert_1kpts/epoch2_checkpoint.pt
 
 cd $dir_path
 
@@ -20,28 +20,30 @@ torchrun pointllm/train/train_mem.py \
     --output_dir $output_dir \
     --version v1 \
     --model_max_length 2048 \
-    --num_train_epochs 3 \
+    --num_train_epochs 10 \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 2 \
     --gradient_accumulation_steps 2 \
     --pointnum 1000000 \
     --optim adamw_bnb_8bit \
-    --evaluation_strategy "no" \
-    --save_strategy "no" \
-    --save_steps 2400 \
+    --evaluation_strategy "epoch" \
+    --save_strategy "epoch" \
+    --load_best_model_at_end True \
+    --metric_for_best_model "eval_loss" \
+    --greater_is_better False \
     --save_total_limit 1 \
     --learning_rate 2e-3 \
-    --weight_decay 0. \
+    --weight_decay 0.01 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --bf16 True \
-    --evaluation_strategy "no" \
     --fix_llm True \
-    --fix_pointnet False \
+    --fix_pointnet True \
     --gradient_checkpointing True \
     --report_to wandb \
     --run_name $filename \
     --point_backbone_ckpt $point_backbone_ckpt \
     --use_color True\
     --split_train_val True
+    # --save_steps 2400 \
