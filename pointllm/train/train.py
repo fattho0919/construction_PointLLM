@@ -205,24 +205,27 @@ def train():
     data_args.point_backbone_config = point_backbone_config
 
     params_no_grad = [n for n, p in model.named_parameters() if not p.requires_grad]
-    if len(params_no_grad) > 0:
-        if training_args.fsdp is not None and len(training_args.fsdp) > 0:
-            if len(params_no_grad) < 10:
-                print('[WARNING] Attempting to use FSDP while {} parameters do not require gradients: {}'. format(len(params_no_grad), params_no_grad))
-            else:
-                print('[WARNING] Attempting to use FSDP while {} parameters do not require gradients: {}...(omitted)'. format(len(params_no_grad), ', '.join(params_no_grad[:10])))
-            print("[WARNING] Attempting to use FSDP with partially frozen paramters, this is experimental.")
-            print("[WARNING] As of 4/30/23, this feature requires PyTorch-nightly build.  See here for details: https://github.com/haotian-liu/LLaVA#experimental-use-fsdp-to-save-memory-in-pretraining")
+    # if len(params_no_grad) > 0:
+    #     if training_args.fsdp is not None and len(training_args.fsdp) > 0:
+    #         if len(params_no_grad) < 10:
+    #             print('[WARNING] Attempting to use FSDP while {} parameters do not require gradients: {}'. format(len(params_no_grad), params_no_grad))
+    #         else:
+    #             print('[WARNING] Attempting to use FSDP while {} parameters do not require gradients: {}...(omitted)'. format(len(params_no_grad), ', '.join(params_no_grad[:10])))
+    #         print("[WARNING] Attempting to use FSDP with partially frozen paramters, this is experimental.")
+    #         print("[WARNING] As of 4/30/23, this feature requires PyTorch-nightly build.  See here for details: https://github.com/haotian-liu/LLaVA#experimental-use-fsdp-to-save-memory-in-pretraining")
 
-            from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            def patch_FSDP_use_orig_params(func):
-                def wrap_func(*args, **kwargs):
-                    use_orig_params = kwargs.pop('use_orig_params', True)
-                    return func(*args, **kwargs, use_orig_params=use_orig_params)
-                return wrap_func
+    #         from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+    #         def patch_FSDP_use_orig_params(func):
+    #             def wrap_func(*args, **kwargs):
+    #                 use_orig_params = kwargs.pop('use_orig_params', True)
+    #                 return func(*args, **kwargs, use_orig_params=use_orig_params)
+    #             return wrap_func
 
-            FSDP.__init__ = patch_FSDP_use_orig_params(FSDP.__init__)
+    #         FSDP.__init__ = patch_FSDP_use_orig_params(FSDP.__init__)
     
+    for n, p in model.named_parameters():
+        if p.requires_grad:
+            print(n)
 
     data_module = make_object_point_data_module(tokenizer=tokenizer,
                                                     data_args=data_args)
@@ -237,9 +240,9 @@ def train():
         trainer.train(resume_from_checkpoint=True)
     else:
         trainer.train()
-    trainer.save_state()
-    safe_save_model_for_hf_trainer(trainer=trainer,
-                                   output_dir=training_args.output_dir)
+    # trainer.save_state()
+    # safe_save_model_for_hf_trainer(trainer=trainer,
+    #                                output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
