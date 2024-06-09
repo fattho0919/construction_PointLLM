@@ -101,27 +101,12 @@ class ObjectPointCloudDataset(Dataset):
         # Load the data list from JSON
         print(f"Loading anno file from {anno_path}.")
         with open(anno_path, "r") as json_file:
-            self.list_data_dict = json.load(json_file)[:1000]
+            self.list_data_dict = json.load(json_file)[:10]
         
         # * print the conversations_type
         print(f"Using conversation_type: {self.conversation_types}") 
         print(f"The dataset size is: {len(self.list_data_dict)}.")
-        # * print before filtering
-        # print(f"Before filtering, the dataset size is: {len(self.list_data_dict)}.")
 
-        # * iterate the list and filter
-        # * these two ids have corrupted colored point files, so filter them when use_color is True
-        # filter_ids = ['6760e543e1d645d5aaacd3803bcae524', 'b91c0711149d460a8004f9c06d3b7f38'] if self.use_color else []
-
-        # Iterate the list, filter those "conversation_type" not in self.conversation_types
-        # self.list_data_dict = [
-        #     data for data in self.list_data_dict 
-        #     if data.get('conversation_type', 'simple_description') in self.conversation_types 
-        #     and data.get('scene_id') not in filter_ids
-        # ]
-
-        # * print after filtering
-        # print(f"After filtering, the dataset size is: {len(self.list_data_dict)}.")
         # * print the size of different conversation_type
         for conversation_type in self.conversation_types:
             print(f"Number of {conversation_type}: {len([data for data in self.list_data_dict if data.get('conversation_type', 'simple_description') == conversation_type])}")
@@ -140,9 +125,9 @@ class ObjectPointCloudDataset(Dataset):
                 print(f"Val set size: {len(self.list_data_dict)}")
 
     def _load_point_cloud(self, scene_id):
-        return self._load_objaverse_point_cloud(scene_id) 
+        return self._load_scene_point_cloud(scene_id) 
 
-    def _load_objaverse_point_cloud(self, scene_id):
+    def _load_scene_point_cloud(self, scene_id):
         filename = f"{scene_id}.npy"
         point_cloud = np.load(os.path.join(self.data_path, filename))
 

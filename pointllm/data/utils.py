@@ -159,21 +159,12 @@ def pc_norm(pc):
     pc = np.concatenate((xyz, other_feature), axis=1)
     return pc
 
-def load_objaverse_point_cloud(data_path, object_id, pointnum=8192, use_color=False):
-    filename = f"{object_id}_{pointnum}.npy"
-    point_cloud = np.load(os.path.join(data_path, filename))
+def load_scene_point_cloud(data_path, file_name, use_color=True):
+    point_cloud = np.load(os.path.join(data_path, file_name))
 
-    # * normalize
-    point_cloud = pc_norm(point_cloud)
-
-    if not use_color:
-        point_cloud = point_cloud[:, :3]
-
-    return point_cloud
-
-def load_scene_point_cloud(data_path, object_id, use_color=False):
-    filename = f"{object_id}.npy"
-    point_cloud = np.load(os.path.join(data_path, filename))
+    if point_cloud.shape[0] > 10000000:
+        point_cloud = downsample_point_cloud(point_cloud)
+        print(f"Downsampled point cloud to {point_cloud.shape[0]} points.")
 
     # * normalize
     point_cloud = pc_norm(point_cloud)
@@ -244,11 +235,11 @@ def downsample_point_cloud(point_cloud, radius=0.1):
     Downsample a point cloud by selecting points with a minimum spacing defined by 'radius'.
 
     Parameters:
-    - point_cloud (numpy.ndarray): The Nx3 array of points.
+    - point_cloud (numpy.ndarray): The Nx6 array of points.
     - radius (float): The radius of spacing between points.
 
     Returns:
-    - numpy.ndarray: The downsampled Nx3 array of points.
+    - numpy.ndarray: The downsampled Nx6 array of points.
     """
     tree = cKDTree(point_cloud[:, :3])
     selected_points = []

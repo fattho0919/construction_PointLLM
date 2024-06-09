@@ -13,4 +13,4 @@ serving_workdirs
 pc
 s3dis
 scannet
-data/
+/data/

@@ -12,18 +12,18 @@ from pointllm.data import load_scene_point_cloud
 import os
 
 def load_point_cloud(args):
-    scene_id = args.scene_id
-    print(f"[INFO] Loading point clouds using scene_id: {scene_id}")
-    point_cloud = load_scene_point_cloud(args.data_path, scene_id, use_color=True)
+    file_name = args.file_name
+    print(f"[INFO] Loading point clouds using file_name: {file_name}")
+    point_cloud = load_scene_point_cloud(args.data_path, file_name, use_color=True)
     
-    return scene_id, torch.from_numpy(point_cloud).unsqueeze_(0).to(torch.float32)
+    return file_name, torch.from_numpy(point_cloud).unsqueeze_(0).to(torch.float32)
 
 def init_model(args):
     # Model
     disable_torch_init()
 
     model_path = args.model_path 
-    print(f'[INFO] Model name: {model_path}')
+    print(f'[INFO] Model path: {model_path}')
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     model = PointLLMLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=False, use_cache=True, torch_dtype=args.torch_dtype).cuda()
@@ -39,7 +39,8 @@ def init_model(args):
         if "v1" in model_path.lower():
             conv_mode = "vicuna_v1_1"
         else:
-            raise NotImplementedError
+            conv_mode = "vicuna_v1_1"
+            # raise NotImplementedError
 
         conv = conv_templates[conv_mode].copy()
 
@@ -57,19 +58,19 @@ def start_conversation(args, model, tokenizer, point_backbone_config, keywords, 
     print("[INFO] Starting conversation... Enter 'q' to exit the program and enter 'exit' to exit the current conversation.")
     while True:
         print("-" * 80)
-        # Prompt for scene_id
-        scene_id = input("[INFO] Please enter the scene_id or 'q' to quit: ")
+        # Prompt for file_name
+        file_name = input("[INFO] Please enter the file_name or 'q' to quit: ")
         
         # Check if the user wants to quit
-        if scene_id.lower() == 'q':
+        if file_name.lower() == 'q':
             print("[INFO] Quitting...")
             break
         else:
             # print info
-            print(f"[INFO] Chatting with scene_id: {scene_id}.")
+            print(f"[INFO] Chatting with file_name: {file_name}.")
         
-        # Update args with new scene_id
-        args.scene_id = scene_id.strip()
+        # Update args with new file_name
+        args.file_name = file_name.strip()
         
         # Load the point cloud data
         try:
@@ -136,11 +137,12 @@ def start_conversation(args, model, tokenizer, point_backbone_config, keywords, 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, \
-       default="RunsenXu/PointLLM_7B_v1.2")
+    parser.add_argument("--model_path", type=str, \
+    #    default="outputs/construction_PointLLM_train_stage1/PointLLM_train_stage1/")
+    default="RunsenXu/PointLLM_7B_v1.2")
 
-    parser.add_argument("--data_path", type=str, default="data/objaverse_data")
-    parser.add_argument("--torch_dtype", type=str, default="float32", choices=["float32", "float16", "bfloat16"])
+    parser.add_argument("--data_path", type=str, default="data/ntu_hm/npy/")
+    parser.add_argument("--torch_dtype", type=str, default="bfloat16", choices=["float32", "float16", "bfloat16"])
 
     args = parser.parse_args()
 
