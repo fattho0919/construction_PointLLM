@@ -54,8 +54,8 @@ class DataArguments:
     use_color: bool = field(default=False, metadata={"help": "Whether to use color."})
     data_debug_num: int = field(default=0, metadata={"help": "Number of data to use in debug mode. If larger than 0, use debug mode, else use the whole data"})
     split_train_val: bool = field(default=True, metadata={"help": "Whether to split train and val."})
-    split_ratio: float = field(default=0.9, metadata={"help": "Ratio of train and val."})
-    pointnum: int = field(default=8192, metadata={"help": "Number of points."})
+    split_ratio: float = field(default=0.8, metadata={"help": "Ratio of train and val."})
+    pointnum: int = field(default=1000000, metadata={"help": "Number of points."})
     conversation_types: List[str] = field(default_factory=lambda: ["simple_description"], metadata={"help": "Conversation types to use."})
     is_multimodal: bool = True
 
@@ -117,7 +117,7 @@ def train():
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=torch.float32,
             llm_int8_skip_modules=["point_proj", "point_backbone", "lm_head", "embed_tokens", "norm"]
         )
         model = PointLLMLlamaForCausalLM.from_pretrained(
@@ -138,7 +138,6 @@ def train():
                 "gate_proj",
                 "up_proj",
                 "down_proj",
-                "lm_head",
             ],
             bias="none",
             lora_dropout=0.05,  # Conventional
@@ -171,7 +170,8 @@ def train():
             GlobalOptimManager.get_instance().register_module_override(module, 'weight', {'optim_bits': 32})
 
     # Initialize the optimizer
-    optimizer = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995), min_8bit_size=16384)
+    # optimizer = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995), min_8bit_size=16384)
+    optimizer = torch.optim.AdamW(model.parameters())
 
     model.config.use_cache = False
 
@@ -179,13 +179,13 @@ def train():
         # * This will fix all the parameters
         logger.info("LLM is fixed. Fix_llm flag is set to True")
         # * fix llama, lm_head, pointnet, projection layer here
-        model.requires_grad_(False)
+        # model.requires_grad_(False)
         model.get_model().fix_llm = True
-        model.get_model().point_proj.requires_grad_(True) 
-        model.get_model().point_backbone.requires_grad_(True) # * set as True for fsdp, use fix_pointnet flag to control
+        # model.get_model().point_backbone.requires_grad_(True) # * set as True for fsdp, use fix_pointnet flag to control
     else:
         model.get_model().fix_llm = False
         logger.warning("LLM is trainable. Fix_llm flag is set to False")
+    model.get_model().point_proj.requires_grad_(True) 
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
@@ -205,24 +205,24 @@ def train():
     if not training_args.fix_pointnet:
         # * not fix pointnet
         logger.info("Point backbone is trainable. Fix_pointnet flag is set to False, pointnet grad will be recorded.")
+        logger.info("Set requires_grad of point backbone to True")
+        model.get_model().point_backbone.requires_grad_(True)
         model.get_model().fix_pointnet = False
     else:
         logger.info("Point backbone is fixed. Fix_pointnet flag is set to True, pointnet grad will not be recorded.")
+        logger.info("Set requires_grad of point backbone to False")
+        model.get_model().point_backbone.requires_grad_(False)
         model.get_model().fix_pointnet = True # * use with torch.inference_mode to control, not requires_grad for fsdp for second stage
-        if not training_args.stage_2:
-            logger.info("Set requires_grad of point backbone to False")
-            model.get_model().point_backbone.requires_grad_(False) # * fix pointnet for first stage, need for fsdp in stage2
     
-    if training_args.tune_mm_mlp_adapter:
-        # * not fix the projection layer
-        # * may need to set the embed_tokens to require_grad = True if added new tokens
-        # * this is done in initialize_tokenizer_point_backbone_config
-        model.get_model().point_proj.requires_grad_(True)
-        logger.info("Point projection layer is trainable.")
-    else:
-        model.get_model().point_proj.requires_grad_(False)
-        logger.info("Point prejcetion layer is fixed.")
-
+    # if training_args.tune_mm_mlp_adapter:
+    #     # * not fix the projection layer
+    #     # * may need to set the embed_tokens to require_grad = True if added new tokens
+    #     # * this is done in initialize_tokenizer_point_backbone_config
+    #     model.get_model().point_proj.requires_grad_(True)
+    #     logger.info("Point projection layer is trainable.")
+    # else:
+    #     model.get_model().point_proj.requires_grad_(False)
+    #     logger.info("Point prejcetion layer is fixed.")
     if not training_args.stage_2:
         # * we assume in stage2, llm, point_backbone, and projection layer can be loaded from the model checkpoint
         print(f"Default point_backbone_ckpt is {training_args.point_backbone_ckpt}.")
