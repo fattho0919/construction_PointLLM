@@ -21,9 +21,11 @@ from bitsandbytes.optim import GlobalOptimManager
 from dataclasses import dataclass, field
 import pathlib
 from typing import Optional, List
+from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model
 
 
 import transformers
+from transformers import BitsAndBytesConfig
 from pointllm.train.pointllm_trainer import PointLLMTrainer
 
 from pointllm import conversation as conversation_lib
@@ -111,13 +113,43 @@ def train():
             )
         model = PointLLMLlamaForCausalLM._from_config(config)
     else:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            llm_int8_skip_modules=["point_proj", "point_backbone", "lm_head", "embed_tokens", "norm"]
+        )
         model = PointLLMLlamaForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
+            quantization_config=bnb_config,
         )
-        if training_args.bf16:
-            model = model.to(torch.bfloat16)
-            print("Model is converted to bfloat16")
+        model = prepare_model_for_kbit_training(model)
+
+        lora_config = LoraConfig(
+            r=32,
+            lora_alpha=64,
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+                "lm_head",
+            ],
+            bias="none",
+            lora_dropout=0.05,  # Conventional
+            task_type="CAUSAL_LM",
+        )
+
+        model = get_peft_model(model, lora_config)
+    
+        # if training_args.bf16:
+        #     model = model.to(torch.bfloat16)
+        #     print("Model is converted to bfloat16")
     
     # First, collect all the embeddings that need to be replaced
     embeddings_to_replace = []
@@ -161,6 +193,7 @@ def train():
         model_max_length=training_args.model_max_length,
         padding_side="right",
         use_fast=False,
+        legacy=False
     )
 
     if model_args.version == "v0" or "v0" in model_args.model_name_or_path:
@@ -184,6 +217,7 @@ def train():
         # * not fix the projection layer
         # * may need to set the embed_tokens to require_grad = True if added new tokens
         # * this is done in initialize_tokenizer_point_backbone_config
+        model.get_model().point_proj.requires_grad_(True)
         logger.info("Point projection layer is trainable.")
     else:
         model.get_model().point_proj.requires_grad_(False)
@@ -204,7 +238,7 @@ def train():
     data_args.mm_use_point_start_end = point_backbone_config['mm_use_point_start_end']
     data_args.point_backbone_config = point_backbone_config
 
-    params_no_grad = [n for n, p in model.named_parameters() if not p.requires_grad]
+    # params_no_grad = [n for n, p in model.named_parameters() if not p.requires_grad]
     # if len(params_no_grad) > 0:
     #     if training_args.fsdp is not None and len(training_args.fsdp) > 0:
     #         if len(params_no_grad) < 10:
@@ -222,13 +256,10 @@ def train():
     #             return wrap_func
 
     #         FSDP.__init__ = patch_FSDP_use_orig_params(FSDP.__init__)
-    
-    for n, p in model.named_parameters():
-        if p.requires_grad:
-            print(n)
 
     data_module = make_object_point_data_module(tokenizer=tokenizer,
                                                     data_args=data_args)
+    model = model.to(training_args.device)
 
     trainer = PointLLMTrainer(model=model,
                     tokenizer=tokenizer,
@@ -243,6 +274,8 @@ def train():
     # trainer.save_state()
     # safe_save_model_for_hf_trainer(trainer=trainer,
     #                                output_dir=training_args.output_dir)
+
+    
 
 
 if __name__ == "__main__":

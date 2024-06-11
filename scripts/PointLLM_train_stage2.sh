@@ -5,14 +5,14 @@ filename=$(basename "$0" | cut -f 1 -d '.')
 dir_path=/home/hongfa/construction_PointLLM
 
 model_name_or_path=checkpoints/PointLLM_7B_v1.2 # Path to the output dir of stage 1 training
-data_path=data/s3dis/pc
-anno_path=data/s3dis/s3dis_anno_list.json
+data_path=data/pc
+anno_path=data/all_scene_anno_list.json
 output_dir=outputs/construction_PointLLM_train_stage2/$filename
 
 cd $dir_path
 
 PYTHONPATH=$dir_path:$PYTHONPATH \
-torchrun --nnodes=1 --nproc_per_node=1 --master_port=$master_port pointllm/train/train_mem.py \
+python pointllm/train/train_mem.py \
     --model_name_or_path $model_name_or_path \
     --data_path $data_path \
     --anno_path $anno_path \

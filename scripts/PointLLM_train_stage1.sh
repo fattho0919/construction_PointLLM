@@ -13,7 +13,7 @@ point_backbone_ckpt=/home/hongfa/scene_ULIP/outputs/reproduce_pointbert_1kpts/ep
 cd $dir_path
 
 PYTHONPATH=$dir_path:$PYTHONPATH \
-torchrun pointllm/train/train_mem.py \
+python pointllm/train/train_mem.py \
     --model_name_or_path $model_name_or_path \
     --data_path $data_path \
     --anno_path $anno_path \
@@ -21,9 +21,9 @@ torchrun pointllm/train/train_mem.py \
     --version v1 \
     --model_max_length 2048 \
     --num_train_epochs 10 \
-    --per_device_train_batch_size 2 \
-    --per_device_eval_batch_size 2 \
-    --gradient_accumulation_steps 2 \
+    --per_device_train_batch_size 4 \
+    --per_device_eval_batch_size 4 \
+    --gradient_accumulation_steps 1 \
     --pointnum 1000000 \
     --optim adamw_bnb_8bit \
     --evaluation_strategy "epoch" \
@@ -38,7 +38,7 @@ torchrun pointllm/train/train_mem.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --bf16 True \
-    --fix_llm True \
+    --fix_llm False \
     --fix_pointnet True \
     --gradient_checkpointing True \
     --report_to wandb \

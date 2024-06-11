@@ -39,7 +39,7 @@ class PointLLMTrainer(Trainer):
 
             current_folder = output_dir.split('/')[-1]
             parent_folder = os.path.dirname(output_dir)
-            if current_folder.startswith('checkpoint-'):
+            if current_folder.startswith('tmp-checkpoint-'):
                 mm_projector_folder = os.path.join(parent_folder, "point_proj")
                 os.makedirs(mm_projector_folder, exist_ok=True)
                 torch.save(weight_to_save, os.path.join(mm_projector_folder, f'{current_folder}.bin'))
