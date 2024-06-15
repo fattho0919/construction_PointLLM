@@ -28,7 +28,6 @@ class PointLLMLlamaModel(LlamaModel):
 
     def __init__(self, config: LlamaConfig):
         super(PointLLMLlamaModel, self).__init__(config)
-
         self.point_backbone_type = config.point_backbone
         logger.info(f"Using {self.point_backbone_type}.")
 

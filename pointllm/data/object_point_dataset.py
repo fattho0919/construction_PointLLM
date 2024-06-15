@@ -66,7 +66,7 @@ class ObjectPointCloudDataset(Dataset):
                  data_path=None,
                  anno_path=None,
                  tokenizer=None,
-                 pointnum=1000000,
+                 pointnum=10000000,
                  split='train',
                  conversation_types=None, # * default is simple_des, used for stage1 pre-train
                  use_color=True,
@@ -101,7 +101,8 @@ class ObjectPointCloudDataset(Dataset):
         # Load the data list from JSON
         print(f"Loading anno file from {anno_path}.")
         with open(anno_path, "r") as json_file:
-            self.list_data_dict = json.load(json_file)[:10]
+            self.list_data_dict = json.load(json_file)
+            # self.list_data_dict = json.load(json_file)[:10000]
         
         # * print the conversations_type
         print(f"Using conversation_type: {self.conversation_types}") 
@@ -116,7 +117,7 @@ class ObjectPointCloudDataset(Dataset):
             # * print all the scan_id in debug mode, not using for loop
             print('Debug mode, using: ' + ' '.join([data['scene_id'] for data in self.list_data_dict]))
         elif self.data_args is not None and self.data_args.split_train_val:
-            # * split train and val with 9:1 ratios
+            # * split train and val with x:y ratios
             if self.split == 'train':
                 self.list_data_dict = self.list_data_dict[:int(self.data_args.split_ratio * len(self.list_data_dict))]
                 print(f"Train set size: {len(self.list_data_dict)}")
@@ -150,12 +151,10 @@ class ObjectPointCloudDataset(Dataset):
         return pc
     
     def __getitem__(self, index):
-        i = 0
         scene_id = self.list_data_dict[index]['scene_id']
         point_cloud = self._load_point_cloud(scene_id) # * N, C
         while len(point_cloud) == 0:
-            i += 1
-            index = index + i
+            index = index + 1
             scene_id = self.list_data_dict[index]['scene_id']
             point_cloud = self._load_point_cloud(scene_id) 
         sources = self.list_data_dict[index]
@@ -223,7 +222,7 @@ if __name__ == '__main__':
                         help="Path to the annotation file.")
     parser.add_argument("--split", default='train', type=str, 
                         help="Whether to use the train or validation dataset.")
-    parser.add_argument("--pointnum", default=8192, type=int,
+    parser.add_argument("--pointnum", default=10000000, type=int,
                         help="Number of points in the point cloud.")
     parser.add_argument("--data_debug_num", default=0, type=int,
                         help="Number of data to debug with.")

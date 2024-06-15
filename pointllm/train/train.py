@@ -125,6 +125,7 @@ def train():
             cache_dir=training_args.cache_dir,
             quantization_config=bnb_config,
         )
+
         model = prepare_model_for_kbit_training(model)
 
         lora_config = LoraConfig(
@@ -150,24 +151,24 @@ def train():
         #     model = model.to(torch.bfloat16)
         #     print("Model is converted to bfloat16")
     
-    # First, collect all the embeddings that need to be replaced
-    embeddings_to_replace = []
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Embedding):
-            embeddings_to_replace.append((name, module))
+    # # First, collect all the embeddings that need to be replaced
+    # embeddings_to_replace = []
+    # for name, module in model.named_modules():
+    #     if isinstance(module, torch.nn.Embedding):
+    #         embeddings_to_replace.append((name, module))
 
-    # Now, replace the embeddings without modifying the dictionary during iteration
-    for name, module in embeddings_to_replace:
-        new_module = bnb.nn.StableEmbedding(module.num_embeddings, module.embedding_dim, padding_idx=module.padding_idx)
-        # Navigate to the right attribute and set the new module
-        parent_name, child_name = name.rsplit('.', 1)
-        parent_module = dict(model.named_modules())[parent_name]
-        setattr(parent_module, child_name, new_module)
+    # # Now, replace the embeddings without modifying the dictionary during iteration
+    # for name, module in embeddings_to_replace:
+    #     new_module = bnb.nn.StableEmbedding(module.num_embeddings, module.embedding_dim, padding_idx=module.padding_idx)
+    #     # Navigate to the right attribute and set the new module
+    #     parent_name, child_name = name.rsplit('.', 1)
+    #     parent_module = dict(model.named_modules())[parent_name]
+    #     setattr(parent_module, child_name, new_module)
 
-    # Register StableEmbedding layers to use 32-bit optimization
-    for module in model.modules():
-        if isinstance(module, bnb.nn.StableEmbedding):
-            GlobalOptimManager.get_instance().register_module_override(module, 'weight', {'optim_bits': 32})
+    # # Register StableEmbedding layers to use 32-bit optimization
+    # for module in model.modules():
+    #     if isinstance(module, bnb.nn.StableEmbedding):
+    #         GlobalOptimManager.get_instance().register_module_override(module, 'weight', {'optim_bits': 32})
 
     # Initialize the optimizer
     # optimizer = bnb.optim.Adam8bit(model.parameters(), lr=0.001, betas=(0.9, 0.995), min_8bit_size=16384)
