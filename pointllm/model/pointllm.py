@@ -28,6 +28,9 @@ class PointLLMLlamaModel(LlamaModel):
 
     def __init__(self, config: LlamaConfig):
         super(PointLLMLlamaModel, self).__init__(config)
+        # ****************************************改這裡****************************************
+        self.fintune = True
+        # ****************************************改這裡****************************************
         self.point_backbone_type = config.point_backbone
         logger.info(f"Using {self.point_backbone_type}.")
 
@@ -66,7 +69,9 @@ class PointLLMLlamaModel(LlamaModel):
         if self.point_backbone_config['projection_hidden_layer'] > 0:
             # Add projection layer with linear layers and GELU activation
             projection_layers = []
+            # ****************************************改這裡****************************************
             last_dim = backbone_output_dim
+            # ****************************************改這裡****************************************
             for i in range(point_bert_config.model.projection_hidden_layer):
                 projection_layers.append(nn.Linear(last_dim, self.point_backbone_config["projection_hidden_dim"][i]))
                 projection_layers.append(nn.GELU())
@@ -121,6 +126,11 @@ class PointLLMLlamaModel(LlamaModel):
                         point_features.append(point_feature)
                 else:
                     point_features = self.point_backbone(point_clouds)
+
+            # ****************************************改這裡****************************************
+            # 把point_feature加一個維度
+
+            # ****************************************改這裡****************************************
 
             if type(point_clouds) is list:
                 point_features = [self.point_proj(point_feature) for point_feature in point_features]

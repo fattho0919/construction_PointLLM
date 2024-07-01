@@ -3,9 +3,10 @@
 filename=$(basename "$0" | cut -f 1 -d '.')
 
 dir_path=/home/hongfa/construction_PointLLM
+# model_name_or_path=outputs/construction_PointLLM_train_stage1/PointLLM_train_stage1/wo_3dllm_checkpoint-13338
 model_name_or_path=checkpoints/PointLLM_7B_v1.2
 data_path=data/pc
-anno_path=data/all_scene_anno_list.json
+anno_path=data/all_scene_anno_list_wo_3dllm.json
 output_dir=outputs/construction_PointLLM_train_stage1/$filename
 # point_backbone_ckpt=checkpoints/point_bert_v1.2.pt
 point_backbone_ckpt=/home/hongfa/scene_ULIP/outputs/reproduce_pointbert_1kpts/epoch2_checkpoint.pt
@@ -20,11 +21,11 @@ python pointllm/train/train_mem.py \
     --output_dir $output_dir \
     --version v1 \
     --model_max_length 2048 \
-    --num_train_epochs 10 \
+    --num_train_epochs 40 \
     --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 1 \
-    --pointnum 1000000 \
+    --pointnum 8500000 \
     --optim adamw_bnb_8bit \
     --evaluation_strategy "epoch" \
     --save_strategy "epoch" \

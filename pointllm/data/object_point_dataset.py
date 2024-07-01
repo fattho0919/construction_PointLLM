@@ -66,7 +66,7 @@ class ObjectPointCloudDataset(Dataset):
                  data_path=None,
                  anno_path=None,
                  tokenizer=None,
-                 pointnum=10000000,
+                 pointnum=8500000,
                  split='train',
                  conversation_types=None, # * default is simple_des, used for stage1 pre-train
                  use_color=True,
@@ -152,11 +152,19 @@ class ObjectPointCloudDataset(Dataset):
     
     def __getitem__(self, index):
         scene_id = self.list_data_dict[index]['scene_id']
-        point_cloud = self._load_point_cloud(scene_id) # * N, C
-        while len(point_cloud) == 0:
+        try:
+            point_cloud = self._load_point_cloud(scene_id) # * N, C
+        except Exception as e:
+            print(f"Error loading point cloud for {scene_id}. {e}")
+            point_cloud = np.array([])
+        while len(point_cloud) == 0 or len(point_cloud) > self.pointnum:
             index = index + 1
             scene_id = self.list_data_dict[index]['scene_id']
-            point_cloud = self._load_point_cloud(scene_id) 
+            try:
+                point_cloud = self._load_point_cloud(scene_id) # * N, C
+            except Exception as e:
+                print(f"Error loading point cloud for {scene_id}. {e}")
+                point_cloud = np.array([])
         sources = self.list_data_dict[index]
         if isinstance(index, int):
             sources = [sources]
@@ -176,8 +184,9 @@ class ObjectPointCloudDataset(Dataset):
             #     idx = idx_file[self.list_data_dict[index]['id']]
             #     point_cloud = point_cloud[idx]
 
-            if point_cloud.shape[0] > self.pointnum:
-                point_cloud = downsample_point_cloud(point_cloud)
+            # if point_cloud.shape[0] > self.pointnum:
+            #     print(f"Downsampling point cloud from {point_cloud.shape[0]} to {self.pointnum}.")
+            #     point_cloud = downsample_point_cloud(point_cloud[None, :, :], self.pointnum)
 
             if self.normalize_pc:
                 point_cloud = self.pc_norm(point_cloud) # * need to norm since point encoder is norm

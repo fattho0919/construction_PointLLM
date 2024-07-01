@@ -349,45 +349,45 @@ def scene_processing():
     anno_list = []
 
     # scene
-    for scene_id, description in s3dis_scene_anno.items():
-        if description == "" or description == "None" or description == []:
-            continue
-        entry = {
-            "scene_id": scene_id,
-            "type": "scene",
-            "id": "",
-            "conversations": [
-                {
-                    "from": "human",
-                    "value": f"<point>\n{random.choice(questions)}"
-                },
-                {
-                    "from": "gpt",
-                    "value": description
-                }
-            ]
-        }
-        anno_list.append(entry)
+    # for scene_id, description in s3dis_scene_anno.items():
+    #     if description == "" or description == "None" or description == []:
+    #         continue
+    #     entry = {
+    #         "scene_id": scene_id,
+    #         "type": "scene",
+    #         "id": "",
+    #         "conversations": [
+    #             {
+    #                 "from": "human",
+    #                 "value": f"<point>\n{random.choice(questions)}"
+    #             },
+    #             {
+    #                 "from": "gpt",
+    #                 "value": description
+    #             }
+    #         ]
+    #     }
+    #     anno_list.append(entry)
 
-    for scene_id, description in scannet_scene_anno.items():
-        if description == "" or description == "None" or description == []:
-            continue
-        entry = {
-            "scene_id": scene_id,
-            "type": "scene",
-            "id": "",
-            "conversations": [
-                {
-                    "from": "human",
-                    "value": f"<point>\n{random.choice(questions)}"
-                },
-                {
-                    "from": "gpt",
-                    "value": description
-                }
-            ]
-        }
-        anno_list.append(entry)
+    # for scene_id, description in scannet_scene_anno.items():
+    #     if description == "" or description == "None" or description == []:
+    #         continue
+    #     entry = {
+    #         "scene_id": scene_id,
+    #         "type": "scene",
+    #         "id": "",
+    #         "conversations": [
+    #             {
+    #                 "from": "human",
+    #                 "value": f"<point>\n{random.choice(questions)}"
+    #             },
+    #             {
+    #                 "from": "gpt",
+    #                 "value": description
+    #             }
+    #         ]
+    #     }
+    #     anno_list.append(entry)
     
     # 3dllm的data是對話形式的，不能用來pretrain encoder
     for anno in scannet_scene_3dllm_annos:
@@ -412,7 +412,7 @@ def scene_processing():
 
     
     random.shuffle(anno_list)
-    with open(os.path.join(output_path, "all_scene_anno_list.json"), "w") as f:
+    with open(os.path.join(output_path, "scene_anno_3dllm.json"), "w") as f:
         json.dump(anno_list, f)
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ def load_point_cloud(args):
     print(f"[INFO] Loading point clouds using file_name: {file_name}")
     point_cloud = load_scene_point_cloud(args.data_path, file_name, use_color=True)
     
-    return file_name, torch.from_numpy(point_cloud).unsqueeze_(0).to(torch.float32)
+    return file_name, torch.from_numpy(point_cloud).unsqueeze_(0)
 
 def init_model(args):
     # Model
@@ -26,15 +26,38 @@ def init_model(args):
     print(f'[INFO] Model path: {model_path}')
 
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = PointLLMLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=False, use_cache=True, torch_dtype=args.torch_dtype).cuda()
+    # bnb_config = BitsAndBytesConfig(
+    #     load_in_4bit=True,
+    #     bnb_4bit_use_double_quant=True,
+    #     bnb_4bit_quant_type="nf4",
+    #     bnb_4bit_compute_dtype=torch.bfloat16,
+    #     llm_int8_skip_modules=["point_proj", "point_backbone", "lm_head", "embed_tokens", "norm"]
+    # )
+    model = PointLLMLlamaForCausalLM.from_pretrained(model_path, torch_dtype=args.torch_dtype)
     model.initialize_tokenizer_point_backbone_config_wo_embedding(tokenizer)
 
+    # Load the point backbone checkpoint
+    backbone_state_dict = torch.load("/home/hongfa/scene_ULIP/outputs/reproduce_pointbert_1kpts/epoch7_checkpoint.pt")
+    new_backbone_state_dict = {}
+    for k, v in backbone_state_dict['state_dict'].items():
+        if k.startswith("point_encoder."):
+            new_backbone_state_dict[k.replace("point_encoder.", "")] = v
+    model.model.point_backbone.load_state_dict(new_backbone_state_dict)
+
+    # Load the point projection checkpoint
+    state_dict = torch.load("/home/hongfa/construction_PointLLM/outputs/construction_PointLLM_train_stage1/PointLLM_train_stage1/wo_3dllm_checkpoint-13338/point_proj/tmp-checkpoint-13338.bin")
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        new_state_dict[k.replace("base_model.model.", "")] = v
+    model.load_state_dict(new_state_dict, strict=False)
+
+    model = model.cuda()
     model.eval()
 
     mm_use_point_start_end = getattr(model.config, "mm_use_point_start_end", False)
     # Add special tokens ind to model.point_config
     point_backbone_config = model.get_model().point_backbone_config
-    
+
     if mm_use_point_start_end:
         if "v1" in model_path.lower():
             conv_mode = "vicuna_v1_1"
@@ -138,10 +161,11 @@ def start_conversation(args, model, tokenizer, point_backbone_config, keywords, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, \
-    #    default="outputs/construction_PointLLM_train_stage1/PointLLM_train_stage1/")
-    default="RunsenXu/PointLLM_7B_v1.2")
+       default="outputs/construction_PointLLM_train_stage1/PointLLM_train_stage1/wo_3dllm_checkpoint-13338")
+    # default="RunsenXu/PointLLM_7B_v1.2")
+    # default="checkpoints/PointLLM_7B_v1.2")
 
-    parser.add_argument("--data_path", type=str, default="data/ntu_hm/npy/")
+    parser.add_argument("--data_path", type=str, default="data/ntu_hm/npy")
     parser.add_argument("--torch_dtype", type=str, default="bfloat16", choices=["float32", "float16", "bfloat16"])
 
     args = parser.parse_args()

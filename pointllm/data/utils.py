@@ -162,12 +162,12 @@ def pc_norm(pc):
 def load_scene_point_cloud(data_path, file_name, use_color=True):
     point_cloud = np.load(os.path.join(data_path, file_name))
 
-    if point_cloud.shape[0] > 10000000:
-        point_cloud = downsample_point_cloud(point_cloud)
-        print(f"Downsampled point cloud to {point_cloud.shape[0]} points.")
+    # if point_cloud.shape[0] > 10000000:
+    #     point_cloud = downsample_point_cloud(point_cloud)
+    #     print(f"Downsampled point cloud to {point_cloud.shape[0]} points.")
 
     # * normalize
-    point_cloud = pc_norm(point_cloud)
+    # point_cloud = pc_norm(point_cloud)
 
     if not use_color:
         point_cloud = point_cloud[:, :3]
@@ -205,60 +205,62 @@ class DataCollatorForPointTextDataset(object):
 
         return batch
 
-def farthest_point_sample(point, npoint):
+# def farthest_point_sample(point, npoint):
+#     """
+#     Input:
+#         xyz: pointcloud data, [N, D]
+#         npoint: number of samples
+#     Return:
+#         centroids: sampled pointcloud index, [npoint, D]
+#     """
+#     N, D = point.shape
+#     if N <= npoint:
+#         return point
+#     xyz = point[:,:3]
+#     centroids = np.zeros((npoint,))
+#     distance = np.ones((N,)) * 1e10
+#     farthest = np.random.randint(0, N)
+#     for i in range(npoint):
+#         centroids[i] = farthest
+#         centroid = xyz[farthest, :]
+#         dist = np.sum((xyz - centroid) ** 2, -1)
+#         mask = dist < distance
+#         distance[mask] = dist[mask]
+#         farthest = np.argmax(distance, -1)
+#     point = point[centroids.astype(np.int32)]
+#     return point
+
+def index_points(points, idx):
     """
     Input:
-        xyz: pointcloud data, [N, D]
-        npoint: number of samples
+        points: input points data, [B, N, C]
+        idx: sample index data, [B, S]
     Return:
-        centroids: sampled pointcloud index, [npoint, D]
+        new_points:, indexed points data, [B, S, C]
     """
-    N, D = point.shape
-    if N <= npoint:
-        return point
-    xyz = point[:,:3]
-    centroids = np.zeros((npoint,))
-    distance = np.ones((N,)) * 1e10
-    farthest = np.random.randint(0, N)
+    B = points.shape[0]
+    view_shape = list(idx.shape)
+    view_shape[1:] = [1] * (len(view_shape) - 1)
+    repeat_shape = list(idx.shape)
+    repeat_shape[0] = 1
+    batch_indices = np.arange(B).reshape(view_shape).repeat(repeat_shape, axis=0)
+    new_points = points[batch_indices, idx, :]
+    return new_points
+
+def downsample_point_cloud(point_cloud, npoint=1200000):
+    print(f"Downsampling point cloud from {point_cloud.shape[0]} to {npoint} points.")
+    B, N, C = point_cloud.shape
+    centroids = np.zeros((B, npoint), dtype=np.int64)
+    distance = np.ones((B, N)) * 1e10
+    farthest = np.random.randint(0, N, (B,), dtype=np.int64)
+    batch_indices = np.arange(B, dtype=np.int64)
     for i in range(npoint):
-        centroids[i] = farthest
-        centroid = xyz[farthest, :]
-        dist = np.sum((xyz - centroid) ** 2, -1)
-        mask = dist < distance
-        distance[mask] = dist[mask]
-        farthest = np.argmax(distance, -1)
-    point = point[centroids.astype(np.int32)]
-    return point
-
-def downsample_point_cloud(point_cloud, radius=0.1):
-    """
-    Downsample a point cloud by selecting points with a minimum spacing defined by 'radius'.
-
-    Parameters:
-    - point_cloud (numpy.ndarray): The Nx6 array of points.
-    - radius (float): The radius of spacing between points.
-
-    Returns:
-    - numpy.ndarray: The downsampled Nx6 array of points.
-    """
-    tree = cKDTree(point_cloud[:, :3])
-    selected_points = []
-    indices = set()
-
-    # Randomly shuffle indices to ensure random sampling
-    all_indices = np.arange(point_cloud.shape[0])
-    np.random.shuffle(all_indices)
-
-    for index in all_indices:
-        if index not in indices:
-            # Query points within the radius
-            neighbors = tree.query_ball_point(point_cloud[index][:3], r=radius)
-            # Mark these points as visited
-            indices.update(neighbors)
-            # Add the current point to the selected list
-            selected_points.append(point_cloud[index])
-
-    return np.array(selected_points)
+        centroids[:, i] = farthest
+        centroid = point_cloud[batch_indices, farthest, :3].reshape(B, 1, 3)  # 只考慮前三維xyz
+        dist = np.sum((point_cloud[:, :, :3] - centroid) ** 2, axis=-1)  # 計算距離時只考慮xyz
+        distance = np.minimum(distance, dist)
+        farthest = np.argmax(distance, axis=-1)
+    return index_points(point_cloud, centroids)
 
 def pc_normalize(pc):
     """
